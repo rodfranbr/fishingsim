@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Pesca</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Simulador de Pesca</h1>
+            <div class="info-bar">
+                <div class="player-info">
+                    <span>Nível: <span id="player-level">1</span></span>
+                    <span>Peixes Capturados: <span id="fish-caught">0</span></span>
+                </div>
+                <div class="environment-info">
+                    <span>Clima: <span id="weather">Ensolarado</span></span>
+                    <span>Hora: <span id="time-of-day">Manhã</span></span>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="game-area">
+                <div class="left-panel">
+                    <div class="depth-control">
+                        <h3>Profundidade</h3>
+                        <div class="depth-slider">
+                            <input type="range" id="depth-slider" min="1" max="50" value="10">
+                            <span id="depth-value">10m</span>
+                        </div>
+                    </div>
+                    
+                    <div class="bait-selection">
+                        <h3>Iscas Disponíveis</h3>
+                        <div id="bait-list" class="bait-list">
+                            <!-- Iscas serão inseridas via JS -->
+                        </div>
+                    </div>
+                    
+                    <div class="equipment">
+                        <h3>Equipamento</h3>
+                        <div class="equipment-item">
+                            <span>Anzol:</span>
+                            <span id="hook-capacity">1000g</span>
+                        </div>
+                        <div class="equipment-item">
+                            <span>Linha:</span>
+                            <span id="line-thickness">0.5mm</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="center-panel">
+                    <div class="fishing-area">
+                        <div class="water-surface"></div>
+                        <div class="underwater">
+                            <div class="fishing-line"></div>
+                            <div id="fish-zone" class="fish-zone">
+                                <!-- Peixes aparecem aqui -->
+                            </div>
+                            <div class="bottom-indicator">
+                                <span id="depth-indicator">10m</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="action-panel">
+                        <button id="cast-line" class="action-btn primary">Lançar Linha</button>
+                        <button id="reel-in" class="action-btn" disabled>Puxar Linha</button>
+                        <button id="change-env" class="action-btn secondary">Mudar Ambiente</button>
+                    </div>
+                </div>
+                
+                <div class="right-panel">
+                    <div class="catch-log">
+                        <h3>Registro de Capturas</h3>
+                        <div id="catch-history" class="catch-history">
+                            <!-- Histórico será inserido via JS -->
+                        </div>
+                    </div>
+                    
+                    <div class="stats">
+                        <h3>Estatísticas</h3>
+                        <div class="stat-item">
+                            <span>Tentativas:</span>
+                            <span id="attempts">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span>Taxa de Sucesso:</span>
+                            <span id="success-rate">0%</span>
+                        </div>
+                        <div class="stat-item">
+                            <span>Maior Peixe:</span>
+                            <span id="biggest-fish">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="events-log" class="events-log">
+                <h3>Eventos</h3>
+                <div id="events-container" class="events-container">
+                    <!-- Eventos serão inseridos via JS -->
+                </div>
+            </div>
+        </main>
+        
+        <div id="notification" class="notification hidden">
+            <div class="notification-content">
+                <h3 id="notification-title">Título da Notificação</h3>
+                <p id="notification-message">Mensagem da notificação</p>
+                <button id="notification-close" class="action-btn">Fechar</button>
+            </div>
+        </div>
+        
+        <div id="catch-popup" class="catch-popup hidden">
+            <div class="catch-popup-content">
+                <h2>Peixe Capturado!</h2>
+                <div id="catch-details" class="catch-details">
+                    <!-- Detalhes do peixe capturado serão inseridos via JS -->
+                </div>
+                <button id="catch-close" class="action-btn primary">Continuar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="js/utils.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/events.js"></script>
+    <script src="js/state.js"></script>
+    <script src="js/engine.js"></script>
+    <script>
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', () => {
+            // Configurar UI inicial
+            updateUI(GameState.getState());
+            
+            // Listener para profundidade
+            document.getElementById('depth-slider').addEventListener('input', (e) => {
+                const depth = parseInt(e.target.value);
+                document.getElementById('depth-value').textContent = `${depth}m`;
+                document.getElementById('depth-indicator').textContent = `${depth}m`;
+                GameState.updateState({
+                    ambiente: { ...GameState.getState().ambiente, profundidade: depth }
+                });
+            });
+            
+            // Botões de ação
+            document.getElementById('cast-line').addEventListener('click', () => {
+                if (!GameState.getState().iscaAtual) {
+                    showNotification('Erro', 'Selecione uma isca antes de lançar a linha!');
+                    return;
+                }
+                
+                document.getElementById('cast-line').disabled = true;
+                document.getElementById('reel-in').disabled = false;
+                
+                FishingEngine.startFishing();
+                
+                addEvent('Linha lançada a ' + GameState.getState().ambiente.profundidade + 'm');
+            });
+            
+            document.getElementById('reel-in').addEventListener('click', () => {
+                document.getElementById('cast-line').disabled = false;
+                document.getElementById('reel-in').disabled = true;
+                
+                FishingEngine.stopFishing();
+                
+                addEvent('Linha recolhida');
+            });
+            
+            document.getElementById('change-env').addEventListener('click', () => {
+                const environments = {
+                    clima: ['Ensolarado', 'Nublado', 'Chuvoso'],
+                    hora: ['Manhã', 'Tarde', 'Noite']
+                };
+                
+                const state = GameState.getState();
+                const currentWeatherIndex = environments.clima.indexOf(state.ambiente.clima);
+                const currentTimeIndex = environments.hora.indexOf(state.ambiente.horaDoDia);
+                
+                const newWeatherIndex = (currentWeatherIndex + 1) % environments.clima.length;
+                const newTimeIndex = (currentTimeIndex + 1) % environments.hora.length;
+                
+                const newWeather = environments.clima[newWeatherIndex];
+                const newTime = environments.hora[newTimeIndex];
+                
+                GameState.updateState({
+                    ambiente: {
+                        ...state.ambiente,
+                        clima: newWeather,
+                        horaDoDia: newTime
+                    }
+                });
+                
+                addEvent(`Ambiente alterado para ${newWeather}, ${newTime}`);
+            });
+            
+            // Fechar notificações
+            document.getElementById('notification-close').addEventListener('click', () => {
+                document.getElementById('notification').classList.add('hidden');
+            });
+            
+            document.getElementById('catch-close').addEventListener('click', () => {
+                document.getElementById('catch-popup').classList.add('hidden');
+            });
+            
+            // Inicializar iscas
+            populateBaits();
+            
+            // Registro para atualizações de estado
+            EventManager.on('stateChanged', updateUI);
+            
+            // Registro para capturas de peixe
+            EventManager.on('fishCaught', (data) => {
+                showCatchPopup(data.peixe);
+                addCatchToHistory(data.peixe);
+                
+                // Atualizar estatísticas
+                const state = GameState.getState();
+                GameState.updateState({
+                    jogador: {
+                        ...state.jogador,
+                        peixesCapturados: state.jogador.peixesCapturados + 1,
+                        nivel: FishingEngine.calcularNivelJogador(state.jogador.peixesCapturados + 1)
+                    },
+                    ultimaCaptura: data.peixe
+                });
+            });
+            
+            // Registro para eventos raros
+            EventManager.on('eventoRaro', (evento) => {
+                showNotification(evento.nome, evento.descricao || 'Um evento raro ocorreu!');
+                addEvent(`Evento Raro: ${evento.nome}`);
+            });
+            
+            // Adicionar evento de inicialização
+            addEvent('Bem-vindo ao Simulador de Pesca!');
+        });
+        
+        // Funções auxiliares da UI
+        function updateUI(state) {
+            document.getElementById('player-level').textContent = state.jogador.nivel;
+            document.getElementById('fish-caught').textContent = state.jogador.peixesCapturados;
+            document.getElementById('weather').textContent = state.ambiente.clima;
+            document.getElementById('time-of-day').textContent = state.ambiente.horaDoDia;
+            document.getElementById('hook-capacity').textContent = state.equipamento.anzol.capacidade + 'g';
+            document.getElementById('line-thickness').textContent = state.equipamento.linha.espessura.toFixed(1) + 'mm';
+            
+            // Atualizar estatísticas
+            document.getElementById('attempts').textContent = state.estatisticas?.tentativas || 0;
+            
+            const successRate = state.estatisticas?.tentativas > 0 
+                ? ((state.jogador.peixesCapturados / state.estatisticas.tentativas) * 100).toFixed(1) 
+                : 0;
+            document.getElementById('success-rate').textContent = successRate + '%';
+            
+            document.getElementById('biggest-fish').textContent = state.estatisticas?.maiorPeixe?.nome || '-';
+        }
+        
+        function populateBaits() {
+            const baitList = document.getElementById('bait-list');
+            baitList.innerHTML = '';
+            
+            GameData.iscas.forEach(isca => {
+                const baitElement = document.createElement('div');
+                baitElement.className = 'bait-item';
+                baitElement.dataset.id = isca.id;
+                
+                baitElement.innerHTML = `
+                    <span class="bait-name">${isca.nome}</span>
+                    <div class="bait-flavors">
+                        ${Object.entries(isca.sabor).map(([sabor, valor]) => 
+                            `<div class="flavor-indicator ${sabor}" style="height: ${valor * 20}px" title="${sabor}: ${valor}"></div>`
+                        ).join('')}
+                    </div>
+                `;
+                
+                baitElement.addEventListener('click', () => {
+                    // Remover seleção anterior
+                    document.querySelectorAll('.bait-item.selected').forEach(el => el.classList.remove('selected'));
+                    
+                    // Adicionar seleção atual
+                    baitElement.classList.add('selected');
+                    
+                    // Atualizar estado
+                    GameState.updateState({
+                        iscaAtual: isca
+                    });
+                    
+                    addEvent(`Isca selecionada: ${isca.nome}`);
+                });
+                
+                baitList.appendChild(baitElement);
+            });
+        }
+        
+        function showNotification(title, message) {
+            document.getElementById('notification-title').textContent = title;
+            document.getElementById('notification-message').textContent = message;
+            document.getElementById('notification').classList.remove('hidden');
+        }
+        
+        function showCatchPopup(peixe) {
+            const catchDetails = document.getElementById('catch-details');
+            catchDetails.innerHTML = `
+                <h3>${peixe.nome}</h3>
+                <div class="catch-stats">
+                    <div class="catch-stat">
+                        <span>Peso:</span>
+                        <span>${peixe.peso}g</span>
+                    </div>
+                    <div class="catch-stat">
+                        <span>Raridade:</span>
+                        <span>${(peixe.raridade * 100).toFixed(1)}%</span>
+                    </div>
+                </div>
+                <div class="catch-flavors">
+                    <h4>Preferências de Sabor:</h4>
+                    <div class="flavor-bars">
+                        ${Object.entries(peixe.preferenciaSabor).map(([sabor, valor]) => `
+                            <div class="flavor-bar">
+                                <span class="flavor-name">${sabor}</span>
+                                <div class="flavor-value-bar">
+                                    <div class="flavor-value" style="width: ${valor * 100}%"></div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('catch-popup').classList.remove('hidden');
+        }
+        
+        function addCatchToHistory(peixe) {
+            const catchHistory = document.getElementById('catch-history');
+            const catchItem = document.createElement('div');
+            catchItem.className = 'catch-item';
+            
+            catchItem.innerHTML = `
+                <span class="catch-name">${peixe.nome}</span>
+                <span class="catch-weight">${peixe.peso}g</span>
+            `;
+            
+            catchHistory.prepend(catchItem);
+            
+            // Limitar número de itens no histórico
+            if (catchHistory.children.length > 10) {
+                catchHistory.removeChild(catchHistory.lastChild);
+            }
+        }
+        
+        function addEvent(message) {
+            const eventsContainer = document.getElementById('events-container');
+            const eventItem = document.createElement('div');
+            eventItem.className = 'event-item';
+            
+            const time = new Date();
+            const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+            
+            eventItem.innerHTML = `
+                <span class="event-time">${timeStr}</span>
+                <span class="event-message">${message}</span>
+            `;
+            
+            eventsContainer.prepend(eventItem);
+            
+            // Limitar número de eventos
+            if (eventsContainer.children.length > 20) {
+                eventsContainer.removeChild(eventsContainer.lastChild);
+            }
+        }
+    </script>
+</body>
+</html>
